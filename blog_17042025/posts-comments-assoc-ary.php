@@ -1,66 +1,95 @@
 <?php
+// 1. Savienojuma izveide ar MySQL datubāzi
+$servername = "localhost"; // Mainiet uz savu servera adresi
+$username = "user27032025";        // Mainiet uz savu lietotājvārdu
+$password = "password";            // Mainiet uz savu paroli
+$dbname = "php27032025"; // Mainiet uz savu datubāzes nosaukumu
 
-// Pieslēdzamies datubāzei
-$pdo = new PDO('mysql:host=localhost;dbname=your_db_name;charset=utf8', 'your_user', 'your_password');
+// Savienojuma izveide
+$conn = new mysqli($servername, $username, $password, $dbname);
 
-// SQL vaicājums, kas iegūst datus no posts un comments tabulām
-$sql = "SELECT p.id AS post_id, p.title, p.content AS post_content, c.id AS comment_id, c.content AS comment_content 
-        FROM posts p
-        LEFT JOIN comments c ON p.id = c.post_id
-        ORDER BY p.id, c.id";
-
-// Veicam vaicājumu
-$stmt = $pdo->query($sql);
-
-// Iegūstam datus kā asociatīvo masīvu
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Algoritms, kas pārveido plakanā masīva datus uz hierarhisku asociatīvu masīvu
-$posts = [];
-
-foreach ($rows as $row) {
-    // Ja posts vēl nav pievienots masīvā, pievienojam to
-    if (!isset($posts[$row['post_id']])) {
-        $posts[$row['post_id']] = [
-            'id' => $row['post_id'],
-            'title' => $row['title'],
-            'content' => $row['post_content'],
-            'comments' => []
-        ];
-    }
-    
-    // Pievienojam komentāru, ja tas ir pieejams
-    if ($row['comment_id']) {
-        $posts[$row['post_id']]['comments'][] = [
-            'id' => $row['comment_id'],
-            'content' => $row['comment_content']
-        ];
-    }
+// Pārbaudīt savienojumu
+if ($conn->connect_error) {
+    die("Savienojums neizdevās: " . $conn->connect_error);
 }
 
-// Attēlojam datus kā hierarhisku HTML sarakstu
-function renderHtml($posts) {
-    $html = '<ul>';
-    
-    foreach ($posts as $post) {
-        $html .= '<li>';
-        $html .= '<strong>' . htmlspecialchars($post['title']) . '</strong>: ' . htmlspecialchars($post['content']);
-        
-        if (!empty($post['comments'])) {
-            $html .= '<ul>';
-            foreach ($post['comments'] as $comment) {
-                $html .= '<li>' . htmlspecialchars($comment['content']) . '</li>';
+// 2. Iegūt visus postus
+$sql_posts = "SELECT * FROM posts"; // Pieņemot, ka ir 'posts' tabula
+$result_posts = $conn->query($sql_posts);
+
+// 3. Saglabāt postus un saistītos komentārus
+$posts_with_comments = [];
+
+if ($result_posts->num_rows > 0) {
+    // Iegūt postus
+    while($post = $result_posts->fetch_assoc()) {
+        $post_id = $post['id']; // Pieņemot, ka ir 'id' kolonna postiem
+
+        // Iegūt komentārus saistītus ar šo postu
+        $sql_comments = "SELECT * FROM comments WHERE post_id = $post_id"; // Pieņemot, ka ir 'comments' tabula
+        $result_comments = $conn->query($sql_comments);
+
+        $comments = [];
+        if ($result_comments->num_rows > 0) {
+            // Iegūt komentārus
+            while($comment = $result_comments->fetch_assoc()) {
+                $comments[] = $comment;
             }
-            $html .= '</ul>';
         }
-        
-        $html .= '</li>';
+
+        // Saglabāt postu un komentārus asociatīvā masīvā
+        $posts_with_comments[] = [
+            'post' => $post,
+            'comments' => $comments
+        ];
     }
-    
-    $html .= '</ul>';
-    return $html;
+} else {
+    echo "Nav atrasti ieraksti posts tabulā.";
 }
 
-// Izvadām HTML struktūru
-echo renderHtml($posts);
+// 4. Attēlot datus HTML hierarhiskā sarakstā
+?>
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Posti un Komentāri</title>
+    <style>
+        ul { list-style-type: none; }
+        li { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Posti un komentāri</h1>
+    <ul>
+        <?php
+        // Attēlot postus un to komentārus
+        foreach ($posts_with_comments as $post_data) {
+            $post = $post_data['post'];
+            $comments = $post_data['comments'];
+            echo "<li>";
+            echo "<strong>" . htmlspecialchars($post['title']) . "</strong><br>";
+            echo "<p>" . htmlspecialchars($post['content']) . "</p>";
+            
+            // Ja ir komentāri, tad attēlot tos
+            if (!empty($comments)) {
+                echo "<ul>";
+                foreach ($comments as $comment) {
+                    echo "<li>";
+                    echo htmlspecialchars($comment['comment']);
+                    echo "</li>";
+                }
+                echo "</ul>";
+            }
+            echo "</li>";
+        }
+        ?>
+    </ul>
+</body>
+</html>
+
+<?php
+// 5. Aizvērt savienojumu ar datubāzi
+$conn->close();
 ?>
